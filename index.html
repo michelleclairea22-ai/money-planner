@@ -10,7 +10,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icons/favicon-32.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-<link rel="stylesheet" href="css/app.css">
+<link rel="stylesheet" href="css/app.css?v=4">
 </head>
 <body>
 <header class="top">
@@ -29,6 +29,28 @@
 </nav>
 <div id="sheet" class="sheet hidden"></div>
 <div id="toast" class="toast hidden"></div>
-<script type="module" src="js/app.js"></script>
+<script>
+(function () {
+  function show(msg) {
+    if (window.__mpShown) return; window.__mpShown = true;
+    var d = document.createElement("div");
+    d.style.cssText = "position:fixed;inset:0;z-index:99999;background:#fff;color:#333;padding:24px;font:15px -apple-system,sans-serif;overflow:auto";
+    d.innerHTML = "<h2 style='color:#F4608F'>Money Planner gagal dibuka</h2><p>Ralat: <code></code></p><p>Data anda masih selamat dalam telefon.</p><button style='padding:12px 18px;border-radius:12px;border:0;background:#F4608F;color:#fff;font-size:16px'>Muat semula (kosongkan cache)</button><p style='color:#999'>v4</p>";
+    d.querySelector("code").textContent = String(msg);
+    d.querySelector("button").onclick = function () {
+      var p = [];
+      if (window.caches) p.push(caches.keys().then(function (k) { return Promise.all(k.map(function (x) { return caches.delete(x); })); }));
+      if (navigator.serviceWorker) p.push(navigator.serviceWorker.getRegistrations().then(function (r) { return Promise.all(r.map(function (x) { return x.unregister(); })); }));
+      Promise.all(p).then(function () { location.replace(location.pathname + "?r=" + Date.now()); }, function () { location.reload(); });
+    };
+    (document.body || document.documentElement).appendChild(d);
+  }
+  window.__mpFail = function (e) { show((e && (e.message || e)) || "tidak diketahui"); };
+  window.addEventListener("error", function (e) { if (!window.__mpBooted) show(e.message || (e.target && e.target.src ? "Gagal muat " + e.target.src : "ralat")); }, true);
+  window.addEventListener("unhandledrejection", function (e) { if (!window.__mpBooted) show(e.reason && e.reason.message || e.reason); });
+  setTimeout(function () { if (!window.__mpBooted) show("App tidak bermula dalam 8 saat (fail lama dalam cache?)"); }, 8000);
+})();
+</script>
+<script type="module" src="js/app.js?v=4"></script>
 </body>
 </html>

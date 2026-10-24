@@ -1,4 +1,4 @@
-const CACHE = "money-planner-v3";
+const CACHE = "money-planner-v4";
 
 const ASSETS = [
   "./",
@@ -21,7 +21,7 @@ self.addEventListener("install", (event) => {
     const cache = await caches.open(CACHE);
     await Promise.all(ASSETS.map(async (url) => {
       try {
-        await cache.add(url);
+        await cache.put(url, await fetch(url, { cache: "no-store" }));
       } catch {
         // A missing asset should not block the rest of the shell.
       }
@@ -45,14 +45,14 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return;
   event.respondWith((async () => {
     try {
-      const fresh = await fetch(req);
+      const fresh = await fetch(req, { cache: "no-store" });
       if (fresh.ok) {
         const cache = await caches.open(CACHE);
         cache.put(req, fresh.clone());
       }
       return fresh;
     } catch {
-      const cached = await caches.match(req);
+      const cached = (await caches.match(req)) || (await caches.match(req, { ignoreSearch: true }));
       if (cached) return cached;
       if (req.mode === "navigate") {
         const home = await caches.match("./index.html");

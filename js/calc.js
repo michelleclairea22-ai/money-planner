@@ -31,7 +31,7 @@ export const inMonth = (txs, ym) => txs.filter((t) => monthKey(t.date) === ym);
 
 export function byDay(txs) {
   const map = {};
-  for (const t of txs) (map[t.date] ||= []).push(t);
+  for (const t of txs) (map[t.date] = map[t.date] || []).push(t);
   return Object.keys(map).sort().reverse().map((date) => ({ date, items: map[date], ...totals(map[date]) }));
 }
 

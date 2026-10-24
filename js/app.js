@@ -1,7 +1,7 @@
-import * as C from "./calc.js";
-import { callApi, cleanWebAppUrl } from "./api.js";
-import { parseImport } from "./importer.js";
-import { KEY, loadState, writeState, restoreBackup } from "./storage.js";
+import * as C from "./calc.js?v=4";
+import { callApi, cleanWebAppUrl } from "./api.js?v=4";
+import { parseImport } from "./importer.js?v=4";
+import { KEY, loadState, writeState, restoreBackup } from "./storage.js?v=4";
 
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -30,11 +30,12 @@ function defaults() {
     deleted: [], settings: { webAppUrl: "", accessKey: "", lastSync: "" },
   };
 }
-const boot = loadState(localStorage, defaults);
+let boot;
+try { boot = loadState(localStorage, defaults); } catch (e) { console.error(e); boot = { state: defaults() }; }
 let S = boot.state;
 const persist = () => writeState(localStorage, S);
 const save = () => { persist(); scheduleSync(); };
-if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {}); } catch (e) {}
 
 let tab = "rekod", ym = todayIso().slice(0, 7), anaMode = "belanja", lagiMode = "kategori", selDay = todayIso();
 
@@ -113,7 +114,7 @@ const views = {
       <div class="row" style="margin-top:12px;flex-wrap:wrap"><button class="btn" id="sSave">Simpan</button><button class="btn ghost" id="sTest">Uji sambungan</button><button class="btn ghost" id="sSync">Segerak sekarang</button></div>
       <div class="mute" style="margin-top:8px">${st.lastSync ? "Segerak terakhir: " + new Date(st.lastSync).toLocaleString("ms-MY") : "Belum pernah segerak."}</div></div>
       <div class="card form"><h3>Data</h3><div class="row" style="flex-wrap:wrap"><button class="btn ghost" id="exp">Eksport JSON</button><button class="btn ghost" id="imp">Import JSON</button><input type="file" id="impFile" accept=".json,application/json" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none"><button class="btn ghost" id="restore">Pulihkan sandaran</button><button class="btn danger" id="wipe">Padam semua data</button></div></div>
-      <div class="mute" style="text-align:center">Money Planner v3</div>`;
+      <div class="mute" style="text-align:center">Money Planner v4</div>`;
   },
 };
 
@@ -279,8 +280,12 @@ $("#view").addEventListener("change", async (e) => {
   save(); render(); toast("Data berjaya diimport");
 });
 { const h = location.hash.slice(1); if (views[h]) tab = h; if (h === "bajet") { tab = "analisis"; anaMode = "bajet"; } if (h === "kategori") tab = "lagi"; }
-render();
+try { render(); window.__mpBooted = true; } catch (e) { window.__mpFail && window.__mpFail(e); }
 if (boot.recoveredFrom) toast("Data dipulihkan dari " + boot.recoveredFrom);
 if (location.hash === "#tambah") openEntry(null);
-if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("sw.js").catch(() => {});
+if ("serviceWorker" in navigator && location.protocol !== "file:") {
+  const hadController = !!navigator.serviceWorker.controller; let reloaded = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => { if (hadController && !reloaded) { reloaded = true; location.reload(); } });
+  navigator.serviceWorker.register("sw.js?v=4", { updateViaCache: "none" }).then((r) => r.update()).catch(() => {});
+}
 if (S.settings.webAppUrl) setTimeout(() => syncNow(false), 1500);
