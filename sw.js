@@ -1,4 +1,4 @@
-const CACHE = "money-planner-v1";
+const CACHE = "money-planner-v2";
 
 const ASSETS = [
   "./",
@@ -7,6 +7,7 @@ const ASSETS = [
   "./js/app.js",
   "./js/calc.js",
   "./js/api.js",
+  "./js/importer.js",
   "./manifest.json",
   "./icons/icon-192.png",
   "./icons/icon-512.png",

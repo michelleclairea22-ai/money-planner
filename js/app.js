@@ -1,5 +1,6 @@
 import * as C from "./calc.js";
 import { callApi, cleanWebAppUrl } from "./api.js";
+import { parseImport } from "./importer.js";
 
 const KEY = "money-planner-v1";
 const $ = (s, el = document) => el.querySelector(s);
@@ -110,7 +111,7 @@ const views = {
       <label>Kunci akses (ACCESS_KEY)</label><input id="sKey" type="password" value="${esc(st.accessKey)}">
       <div class="row" style="margin-top:12px;flex-wrap:wrap"><button class="btn" id="sSave">Simpan</button><button class="btn ghost" id="sTest">Uji sambungan</button><button class="btn ghost" id="sSync">Segerak sekarang</button></div>
       <div class="mute" style="margin-top:8px">${st.lastSync ? "Segerak terakhir: " + new Date(st.lastSync).toLocaleString("ms-MY") : "Belum pernah segerak."}</div></div>
-      <div class="card form"><h3>Data</h3><div class="row" style="flex-wrap:wrap"><button class="btn ghost" id="exp">Eksport JSON</button><button class="btn danger" id="wipe">Padam semua data</button></div></div>
+      <div class="card form"><h3>Data</h3><div class="row" style="flex-wrap:wrap"><button class="btn ghost" id="exp">Eksport JSON</button><button class="btn ghost" id="imp">Import JSON</button><input type="file" id="impFile" accept=".json,application/json" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none"><button class="btn danger" id="wipe">Padam semua data</button></div></div>
       <div class="mute" style="text-align:center">Money Planner v1</div>`;
   },
 };
@@ -254,10 +255,27 @@ $("#view").onclick = (e) => {
     if (b.id === "sSave") toast("Tetapan disimpan");
     if (b.id === "sTest") callApi(S.settings, "ping").then(() => toast("Sambungan OK ✓"), (er) => toast(er.code === "unauthorized" ? "Kunci salah" : "Gagal: " + er.code));
     if (b.id === "sSync") syncNow(true);
-  } else if (b.id === "exp") {
-    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(S, null, 2)], { type: "application/json" })); a.download = `money-planner-${todayIso()}.json`; a.click();
+  } else if (b.id === "exp") exportData();
+  else if (b.id === "imp") { const f = $("#impFile"); f.value = ""; f.click(); }
   } else if (b.id === "wipe") { if (confirm("Padam SEMUA data dalam telefon ini?")) { const st = S.settings; S = defaults(); S.settings = st; localStorage.setItem(KEY, JSON.stringify(S)); render(); } }
 };
+async function exportData() {
+  const name = `money-planner-${todayIso()}.json`, json = JSON.stringify(S, null, 2);
+  const file = new File([json], name, { type: "application/json" });
+  if (navigator.canShare && navigator.canShare({ files: [file] }) && confirm("Kongsi/simpan fail (pilih 'Save to Files')? Batal = muat turun biasa.")) {
+    try { await navigator.share({ files: [file], title: name }); return; } catch (e) { if (e.name === "AbortError") return; }
+  }
+  const url = URL.createObjectURL(new Blob([json], { type: "application/json" }));
+  const a = document.createElement("a"); a.href = url; a.download = name; a.rel = "noopener"; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+$("#view").addEventListener("change", async (e) => {
+  if (e.target.id !== "impFile") return; const f = e.target.files && e.target.files[0]; if (!f) return;
+  let d; try { d = parseImport(await f.text()); } catch (er) { e.target.value = ""; return toast(er.message); }
+  if (!confirm("Ganti semua data dalam app ini dengan data dari fail?")) { e.target.value = ""; return; }
+  const st = S.settings; S = { ...defaults(), ...d, settings: st.webAppUrl ? st : { ...defaults().settings, ...(d.settings || {}) } };
+  save(); render(); toast("Data berjaya diimport");
+});
 { const h = location.hash.slice(1); if (views[h]) tab = h; if (h === "bajet") { tab = "analisis"; anaMode = "bajet"; } if (h === "kategori") tab = "lagi"; }
 render();
 if (location.hash === "#tambah") openEntry(null);
