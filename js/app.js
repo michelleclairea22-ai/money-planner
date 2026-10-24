@@ -1,8 +1,8 @@
 import * as C from "./calc.js";
 import { callApi, cleanWebAppUrl } from "./api.js";
 import { parseImport } from "./importer.js";
+import { KEY, loadState, writeState, restoreBackup } from "./storage.js";
 
-const KEY = "money-planner-v1";
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -30,10 +30,11 @@ function defaults() {
     deleted: [], settings: { webAppUrl: "", accessKey: "", lastSync: "" },
   };
 }
-let S;
-try { S = { ...defaults(), ...JSON.parse(localStorage.getItem(KEY) || "null") }; } catch { S = defaults(); }
-if (!localStorage.getItem(KEY)) S = defaults();
-const save = () => { localStorage.setItem(KEY, JSON.stringify(S)); scheduleSync(); };
+const boot = loadState(localStorage, defaults);
+let S = boot.state;
+const persist = () => writeState(localStorage, S);
+const save = () => { persist(); scheduleSync(); };
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
 
 let tab = "rekod", ym = todayIso().slice(0, 7), anaMode = "belanja", lagiMode = "kategori", selDay = todayIso();
 
@@ -111,8 +112,8 @@ const views = {
       <label>Kunci akses (ACCESS_KEY)</label><input id="sKey" type="password" value="${esc(st.accessKey)}">
       <div class="row" style="margin-top:12px;flex-wrap:wrap"><button class="btn" id="sSave">Simpan</button><button class="btn ghost" id="sTest">Uji sambungan</button><button class="btn ghost" id="sSync">Segerak sekarang</button></div>
       <div class="mute" style="margin-top:8px">${st.lastSync ? "Segerak terakhir: " + new Date(st.lastSync).toLocaleString("ms-MY") : "Belum pernah segerak."}</div></div>
-      <div class="card form"><h3>Data</h3><div class="row" style="flex-wrap:wrap"><button class="btn ghost" id="exp">Eksport JSON</button><button class="btn ghost" id="imp">Import JSON</button><input type="file" id="impFile" accept=".json,application/json" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none"><button class="btn danger" id="wipe">Padam semua data</button></div></div>
-      <div class="mute" style="text-align:center">Money Planner v1</div>`;
+      <div class="card form"><h3>Data</h3><div class="row" style="flex-wrap:wrap"><button class="btn ghost" id="exp">Eksport JSON</button><button class="btn ghost" id="imp">Import JSON</button><input type="file" id="impFile" accept=".json,application/json" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none"><button class="btn ghost" id="restore">Pulihkan sandaran</button><button class="btn danger" id="wipe">Padam semua data</button></div></div>
+      <div class="mute" style="text-align:center">Money Planner v3</div>`;
   },
 };
 
@@ -228,7 +229,7 @@ async function syncNow(loud) {
       for (const item of push) await callApi(st, upA, { item });
       S[prop] = Object.values(merged);
     }
-    st.lastSync = now(); localStorage.setItem(KEY, JSON.stringify(S)); render(); if (loud) toast("Segerak berjaya ✓");
+    st.lastSync = now(); persist(); render(); if (loud) toast("Segerak berjaya ✓");
   } catch (e) { if (loud) toast(e.code === "unauthorized" ? "Kunci salah" : e.code === "network" ? "Tiada sambungan" : "Gagal: " + e.code); }
   finally { syncing = false; }
 }
@@ -251,13 +252,14 @@ $("#view").onclick = (e) => {
   else if (ds.bud) editBudget(ds.bud);
   else if (ds.cat) editCategory(ds.cat);
   else if (b.id === "sSave" || b.id === "sTest" || b.id === "sSync") {
-    S.settings.webAppUrl = cleanWebAppUrl($("#sUrl").value); S.settings.accessKey = $("#sKey").value.trim(); localStorage.setItem(KEY, JSON.stringify(S));
+    S.settings.webAppUrl = cleanWebAppUrl($("#sUrl").value); S.settings.accessKey = $("#sKey").value.trim(); persist();
     if (b.id === "sSave") toast("Tetapan disimpan");
     if (b.id === "sTest") callApi(S.settings, "ping").then(() => toast("Sambungan OK ✓"), (er) => toast(er.code === "unauthorized" ? "Kunci salah" : "Gagal: " + er.code));
     if (b.id === "sSync") syncNow(true);
   } else if (b.id === "exp") exportData();
   else if (b.id === "imp") { const f = $("#impFile"); f.value = ""; f.click(); }
-  } else if (b.id === "wipe") { if (confirm("Padam SEMUA data dalam telefon ini?")) { const st = S.settings; S = defaults(); S.settings = st; localStorage.setItem(KEY, JSON.stringify(S)); render(); } }
+  else if (b.id === "restore") { if (confirm("Pulihkan data dari sandaran?")) { const r = restoreBackup(localStorage, defaults); if (r) { S = r; render(); toast("Sandaran dipulihkan"); } else toast("Tiada sandaran"); } }
+  else if (b.id === "wipe") { if (confirm("Padam SEMUA data dalam telefon ini?")) { const st = S.settings; S = defaults(); S.settings = st; localStorage.setItem(KEY, JSON.stringify(S)); render(); toast("Dipadam. Sandaran masih boleh dipulihkan."); } }
 };
 async function exportData() {
   const name = `money-planner-${todayIso()}.json`, json = JSON.stringify(S, null, 2);
@@ -278,6 +280,7 @@ $("#view").addEventListener("change", async (e) => {
 });
 { const h = location.hash.slice(1); if (views[h]) tab = h; if (h === "bajet") { tab = "analisis"; anaMode = "bajet"; } if (h === "kategori") tab = "lagi"; }
 render();
+if (boot.recoveredFrom) toast("Data dipulihkan dari " + boot.recoveredFrom);
 if (location.hash === "#tambah") openEntry(null);
 if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("sw.js").catch(() => {});
 if (S.settings.webAppUrl) setTimeout(() => syncNow(false), 1500);
